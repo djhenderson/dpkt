@@ -1,0 +1,29 @@
+
+Original author
+---------------
+
+Dug Song <dugsong@monkey.org>
+
+
+Contributors
+------------
+
+the grugq <thegrugq@gmail.com>
+	better RTP module
+
+Tim Newsham <newsham@lava.net>
+	IPv6 bugfixing and improvements
+
+Jon Oberheide <jon@oberheide.org>
+	STUN, H.225, and TPKT modules
+	NTP, RIP, Diameter, and SCTP modules
+	BGP and MRT modules
+
+Robert Stone <otaku@monkey.org>
+	Netflow and QQ modules
+
+Thomas Taranowski <thomastaranowski@yahoo.com>
+	dnet IP checksum bug on i386
+
+Tim Yardley <yardley@gmail.com>
+	DHCP definitions
