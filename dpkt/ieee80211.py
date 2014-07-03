@@ -92,6 +92,20 @@ FRAMES_WITH_CAPABILITY = [ M_BEACON,
                            M_REASSOC_REQ,
                          ]
 
+# Block Ack control constants
+_ACK_POLICY_SHIFT = 0
+_MULTI_TID_SHIFT  = 1
+_COMPRESSED_SHIFT = 2
+_TID_SHIFT        = 12
+
+_ACK_POLICY_MASK = 0x0001
+_MULTI_TID_MASK  = 0x0002
+_COMPRESSED_MASK = 0x0004
+_TID_MASK        = 0xf000
+
+_COMPRESSED_BMP_LENGTH = 8
+_BMP_LENGTH = 128
+
 class IEEE80211(dpkt.Packet):
     __hdr__ = (
         ('framectl', 'H', 0),
@@ -283,10 +297,39 @@ class IEEE80211(dpkt.Packet):
 
     class BlockAck(dpkt.Packet):
         __hdr__ = (
+            ('dst', '6s', '\x00' * 6),
+            ('src', '6s', '\x00' * 6),
             ('ctl', 'H', 0),
             ('seq', 'H', 0),
-            ('bmp', '128s', '\x00' *128)
             )
+
+        def _get_compressed(self): return (self.ctl & _COMPRESSED_MASK) >> _COMPRESSED_SHIFT
+        def _set_compressed(self, val): self.ctl = (val << _COMPRESSED_SHIFT) | (self.ctl & ~_COMPRESSED_MASK)
+
+        def _get_ack_policy(self): return (self.ctl & _ACK_POLICY_MASK) >> _ACK_POLICY_SHIFT
+        def _set_ack_policy(self, val): self.ctl = (val << _ACK_POLICY_SHIFT) | (self.ctl & ~_ACK_POLICY_MASK)
+
+        def _get_multi_tid(self): return (self.ctl & _MULTI_TID_MASK) >> _MULTI_TID_SHIFT
+        def _set_multi_tid(self, val): self.ctl = (val << _MULTI_TID_SHIFT) | (self.ctl & ~_MULTI_TID_MASK)
+
+        def _get_tid(self): return (self.ctl & _TID_MASK) >> _TID_SHIFT
+        def _set_tid(self, val): self.ctl = (val << _TID_SHIFT) | (self.ctl & ~_TID_MASK)
+
+        compressed = property(_get_compressed, _set_compressed)
+        ack_policy = property(_get_ack_policy, _set_ack_policy)
+        multi_tid = property(_get_multi_tid, _set_multi_tid)
+        tid = property(_get_tid, _set_tid)
+
+        def unpack(self, buf):
+            dpkt.Packet.unpack(self, buf)
+            self.data = buf[self.__hdr_len__:]
+            self.ctl = socket.ntohs(self.ctl)
+
+            if self.compressed:
+                self.bmp = struct.unpack('8s', self.data[0:_COMPRESSED_BMP_LENGTH])[0]
+            else:
+                self.bmp = struct.unpack('128s', self.data[0:_BMP_LENGTH])[0]
+            self.data = self.data[len(self.__hdr__) + len(self.bmp):]
 
     class RTS(dpkt.Packet):
         __hdr__ = (
@@ -323,20 +366,20 @@ class IEEE80211(dpkt.Packet):
         __hdr__ = (
             ('reason', 'H', 0),
             )
-    
+
     class Assoc_Req(dpkt.Packet):
         __hdr__ = (
             ('capability', 'H', 0),
             ('interval', 'H', 0)
             )
-    
+
     class Assoc_Resp(dpkt.Packet):
         __hdr__ = (
             ('capability', 'H', 0),
             ('status', 'H', 0),
             ('aid', 'H', 0)
             )
-    
+
     class Reassoc_Req(dpkt.Packet):
         __hdr__ = (
             ('capability', 'H', 0),
@@ -372,7 +415,7 @@ class IEEE80211(dpkt.Packet):
             ('src', '6s', '\x00'*6),
             ('frag_seq', 'H', 0)
             )
-    
+
 
     class DataToDS(dpkt.Packet):
         __hdr__ = (
@@ -401,10 +444,10 @@ class IEEE80211(dpkt.Packet):
             ('id', 'B', 0),
             ('len', 'B', 0)
             )
-        def unpack(self, buf):        
+        def unpack(self, buf):
             dpkt.Packet.unpack(self, buf)
             self.info = buf[2:self.len+ 2]
-  
+
     class FH(dpkt.Packet):
         __hdr__ = (
             ('id', 'B', 0),
@@ -414,7 +457,7 @@ class IEEE80211(dpkt.Packet):
             ('hoppattern', 'B', 0),
             ('hopindex', 'B', 0)
             )
-       
+
     class DS(dpkt.Packet):
         __hdr__ = (
             ('id', 'B', 0),
@@ -431,7 +474,7 @@ class IEEE80211(dpkt.Packet):
             ('max', 'H', 0),
             ('dur', 'H', 0)
             )
-  
+
     class TIM(dpkt.Packet):
        __hdr__ = (
             ('id', 'B', 0),
@@ -561,5 +604,16 @@ if __name__ == '__main__':
             self.failUnless(ieee.data_frame.src == '\x00\x1f\x33\x39\x75\x44')
             self.failUnless(ieee.data_frame.dst == '\x00\x02\x44\xac\x27\x70')
 
+        def test_compressed_block_ack(self):
+            s = '\x94\x00\x00\x00\x34\xc0\x59\xd6\x3f\x62\xb4\x75\x0e\x46\x83\xc1\x05\x50\x80\xee\x03\x00\x00\x00\x00\x00\x00\x00\xa2\xe4\x98\x45'
+            ieee = IEEE80211(s)
+            self.failUnless(ieee.type == CTL_TYPE)
+            self.failUnless(ieee.subtype == C_BLOCK_ACK)
+            self.failUnless(ieee.back.dst == '\x34\xc0\x59\xd6\x3f\x62')
+            self.failUnless(ieee.back.src == '\xb4\x75\x0e\x46\x83\xc1')
+            self.failUnless(ieee.back.compressed == 1)
+            self.failUnless(len(ieee.back.bmp) == 8)
+            self.failUnless(ieee.back.ack_policy == 1)
+            self.failUnless(ieee.back.tid == 5)
 
     unittest.main()
