@@ -86,6 +86,12 @@ IE_HT_INFO = 61
 
 FCS_LENGTH = 4
 
+FRAMES_WITH_CAPABILITY = [ M_BEACON,
+                           M_ASSOC_RESP,
+                           M_ASSOC_REQ,
+                           M_REASSOC_REQ,
+                         ]
+
 class IEEE80211(dpkt.Packet):
     __hdr__ = (
         ('framectl', 'H', 0),
@@ -249,25 +255,24 @@ class IEEE80211(dpkt.Packet):
         if self.type == DATA_TYPE:
             # need to grab the ToDS/FromDS info
             parser = parser[self.to_ds*10+self.from_ds]
-        
+
         if self.type == MGMT_TYPE:
             field = parser(self.mgmt.data)
         else:
             field = parser(self.data)
             self.data = field
-    
+
         setattr(self, name, field)
 
         if self.type == MGMT_TYPE:
             self.ies = self.unpack_ies(field.data)
-            if self.subtype == M_BEACON or self.subtype == M_ASSOC_RESP or\
-                self.subtype == M_ASSOC_REQ or self.subtype == M_REASSOC_REQ:
+            if self.subtype in FRAMES_WITH_CAPABILITY:
                 self.capability = self.Capability(socket.ntohs(field.capability))
 
         if self.type == DATA_TYPE and self.subtype == D_QOS_DATA:
             self.qos_data = self.QoS_Data(field.data)
             field.data = self.qos_data.data
-        
+
         self.data = field.data
 
     class BlockAckReq(dpkt.Packet):
