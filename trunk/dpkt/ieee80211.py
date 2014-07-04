@@ -16,11 +16,12 @@ M_REASSOC_REQ       = 2
 M_REASSOC_RESP      = 3
 M_PROBE_REQ         = 4
 M_PROBE_RESP        = 5
+M_BEACON            = 8
+M_ATIM              = 9
 M_DISASSOC          = 10
 M_AUTH              = 11
 M_DEAUTH            = 12
-M_BEACON            = 8
-M_ATIM              = 9
+M_ACTION            = 13
 C_BLOCK_ACK_REQ     = 8
 C_BLOCK_ACK         = 9
 C_PS_POLL           = 10
@@ -105,6 +106,13 @@ _TID_MASK        = 0xf000
 
 _COMPRESSED_BMP_LENGTH = 8
 _BMP_LENGTH = 128
+
+# Action frame categories
+BLOCK_ACK = 3
+
+# Block ack category action codes
+BLOCK_ACK_CODE_REQUEST = 0
+BLOCK_ACK_CODE_RESPONSE = 1
 
 class IEEE80211(dpkt.Packet):
     __hdr__ = (
@@ -210,7 +218,8 @@ class IEEE80211(dpkt.Packet):
             M_REASSOC_RESP: ('reassoc_resp',self.Assoc_Resp),
             M_AUTH:         ('auth',        self.Auth),
             M_PROBE_RESP:   ('probe_resp',  self.Beacon),
-            M_DEAUTH:       ('deauth',      self.Deauth)
+            M_DEAUTH:       ('deauth',      self.Deauth),
+            M_ACTION:       ('action',      self.Action)
         }
 
         c_decoder = {
@@ -397,6 +406,43 @@ class IEEE80211(dpkt.Packet):
     class Deauth(dpkt.Packet):
         __hdr__ = (
             ('reason', 'H', 0),
+            )
+
+    class Action(dpkt.Packet):
+        __hdr__ = (
+            ('category', 'B', 0),
+            ('code', 'B', 0),
+            )
+
+        def unpack(self, buf):
+            dpkt.Packet.unpack(self, buf)
+
+            action_parser = {
+                BLOCK_ACK: { BLOCK_ACK_CODE_REQUEST: ('block_ack_request', IEEE80211.BlockAckActionRequest),
+                              BLOCK_ACK_CODE_RESPONSE: ('block_ack_response', IEEE80211.BlockAckActionResponse),
+                            },
+            }
+
+            decoder = action_parser[self.category][self.code][1]
+            field_name = action_parser[self.category][self.code][0]
+            field = decoder(self.data)
+            setattr(self, field_name, field)
+            self.data = field.data
+
+    class BlockAckActionRequest(dpkt.Packet):
+        __hdr__ = (
+            ('dialog', 'B', 0),
+            ('parameters', 'H', 0),
+            ('timeout', 'H', 0),
+            ('starting_seq', 'H', 0),
+            )
+
+    class BlockAckActionResponse(dpkt.Packet):
+        __hdr__ = (
+            ('dialog', 'B', 0),
+            ('status_code', 'H', 0),
+            ('parameters', 'H', 0),
+            ('timeout', 'H', 0),
             )
 
     class Data(dpkt.Packet):
@@ -615,5 +661,28 @@ if __name__ == '__main__':
             self.failUnless(len(ieee.back.bmp) == 8)
             self.failUnless(ieee.back.ack_policy == 1)
             self.failUnless(ieee.back.tid == 5)
+
+        def test_action_block_ack_request(self):
+            s = '\xd0\x00\x3a\x01\x00\x23\x14\x36\x52\x30\xb4\x75\x0e\x46\x83\xc1\xb4\x75\x0e\x46\x83\xc1\x70\x14\x03\x00\x0d\x02\x10\x00\x00\x40\x29\x06\x50\x33\x9e'
+            ieee = IEEE80211(s)
+            self.failUnless(ieee.type == MGMT_TYPE)
+            self.failUnless(ieee.subtype == M_ACTION)
+            self.failUnless(ieee.action.category == BLOCK_ACK)
+            self.failUnless(ieee.action.code == BLOCK_ACK_CODE_REQUEST)
+            self.failUnless(ieee.action.block_ack_request.timeout == 0)
+            parameters = struct.unpack('H', '\x10\x02')[0]
+            self.failUnless(ieee.action.block_ack_request.parameters == parameters)
+
+        def test_action_block_ack_response(self):
+            s = '\xd0\x00\x3c\x00\xb4\x75\x0e\x46\x83\xc1\x00\x23\x14\x36\x52\x30\xb4\x75\x0e\x46\x83\xc1\xd0\x68\x03\x01\x0d\x00\x00\x02\x10\x88\x13\x9f\xc0\x0b\x75'
+            ieee = IEEE80211(s)
+            self.failUnless(ieee.type == MGMT_TYPE)
+            self.failUnless(ieee.subtype == M_ACTION)
+            self.failUnless(ieee.action.category == BLOCK_ACK)
+            self.failUnless(ieee.action.code == BLOCK_ACK_CODE_RESPONSE)
+            timeout = struct.unpack('H', '\x13\x88')[0]
+            self.failUnless(ieee.action.block_ack_response.timeout == timeout)
+            parameters = struct.unpack('H', '\x10\x02')[0]
+            self.failUnless(ieee.action.block_ack_response.parameters == parameters)
 
     unittest.main()
