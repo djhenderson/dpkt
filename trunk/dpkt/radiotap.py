@@ -1,6 +1,8 @@
 '''Radiotap'''
 
 import dpkt
+import ieee80211
+import socket
 
 # Ref: http://www.radiotap.org
 # Fields Ref: http://www.radiotap.org/defined-fields/all
@@ -135,7 +137,7 @@ class Radiotap(dpkt.Packet):
 
     def unpack(self, buf):
         dpkt.Packet.unpack(self, buf)
-        self.data = buf[self.length:]
+        self.data = buf[socket.ntohs(self.length):]
 
         self.fields = []
         buf = buf[self.__hdr_len__:]
@@ -165,6 +167,12 @@ class Radiotap(dpkt.Packet):
                 setattr(self, name, field)
                 self.fields.append(field)
                 buf = buf[len(field):]
+
+        if len(self.data) > 0:
+            if self.flags_present and self.flags.fcs:
+                self.data = ieee80211.IEEE80211(self.data, fcs = self.flags.fcs)
+            else:
+                self.data = ieee80211.IEEE80211(self.data)
 
     class Antenna(dpkt.Packet):
         __hdr__ = (
