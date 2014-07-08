@@ -235,7 +235,8 @@ class IEEE80211(dpkt.Packet):
             C_CTS:          ('cts',         self.CTS),
             C_ACK:          ('ack',         self.ACK),
             C_BLOCK_ACK_REQ:('bar',         self.BlockAckReq),
-            C_BLOCK_ACK:    ('back',        self.BlockAck)
+            C_BLOCK_ACK:    ('back',        self.BlockAck),
+            C_CF_END:       ('cf_end',      self.CFEnd),
         }
 
         d_dsData = {
@@ -365,6 +366,12 @@ class IEEE80211(dpkt.Packet):
     class ACK(dpkt.Packet):
         __hdr__ = (
             ('dst', '6s', '\x00' * 6),
+            )
+
+    class CFEnd(dpkt.Packet):
+        __hdr__ = (
+            ('dst', '6s', '\x00' *6),
+            ('src', '6s', '\x00' *6),
             )
 
     class MGMT_Frame(dpkt.Packet):
