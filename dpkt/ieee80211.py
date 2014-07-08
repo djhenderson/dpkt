@@ -309,6 +309,8 @@ class IEEE80211(dpkt.Packet):
 
     class BlockAckReq(dpkt.Packet):
         __hdr__ = (
+            ('dst', '6s', '\x00' * 6),
+            ('src', '6s', '\x00' *6),
             ('ctl', 'H', 0),
             ('seq', 'H', 0),
             )
